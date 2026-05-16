@@ -57,6 +57,29 @@ export default function AdminPage() {
     await loadAdminState();
   }
 
+  async function deletePlayer(playerId: string, playerName: string) {
+    setError("");
+    setMessage("");
+
+    const confirmed = window.confirm(`Remove ${playerName}? This also removes their related votes.`);
+    if (!confirmed) return;
+
+    const { error } = await supabase.rpc("delete_survivor_player", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+      p_player_id: playerId,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setMessage(`${playerName} removed.`);
+    await loadAdminState();
+    if (selectedRoundId) await getResults(selectedRoundId);
+  }
+
   async function startRound() {
     setError("");
     setMessage("");
@@ -241,6 +264,7 @@ export default function AdminPage() {
                   <tr>
                     <th>Name</th>
                     <th>Status</th>
+                    <th>Manage</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -248,6 +272,11 @@ export default function AdminPage() {
                     <tr key={p.id}>
                       <td>{p.name}</td>
                       <td>{p.is_eliminated ? "Eliminated" : "Active"}</td>
+                      <td>
+                        <button className="danger" onClick={() => deletePlayer(p.id, p.name)}>
+                          Remove
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -257,7 +286,7 @@ export default function AdminPage() {
             <div className="card">
               <h2>Rounds</h2>
               <div className="row">
-                <label style={{ maxWidth: 220 }}>
+                <label style={{ maxWidth: 260 }}>
                   <span className="small">People eliminated this round</span>
                   <input
                     type="number"
