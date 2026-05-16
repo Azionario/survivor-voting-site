@@ -332,7 +332,6 @@ export default function AdminPage() {
 
   const voteUrl = typeof window !== "undefined" ? `${window.location.origin}/vote/${gameCode.toUpperCase()}` : `/vote/${gameCode.toUpperCase()}`;
   const bettingUrl = typeof window !== "undefined" ? `${window.location.origin}/betting/${gameCode.toUpperCase()}` : `/betting/${gameCode.toUpperCase()}`;
-  const marketsUrl = typeof window !== "undefined" ? `${window.location.origin}/markets/${gameCode.toUpperCase()}` : `/markets/${gameCode.toUpperCase()}`;
   const resultsUrl = typeof window !== "undefined" && selectedRoundId ? `${window.location.origin}/results/${gameCode.toUpperCase()}?round=${selectedRoundId}` : "";
 
   return (
@@ -356,7 +355,6 @@ export default function AdminPage() {
           <button onClick={loadAdminState}>Load Game</button>
           <a className="button secondary" href={voteUrl} target="_blank">Open Voting Page</a>
           <a className="button secondary" href={bettingUrl} target="_blank">Open Betting Favorites</a>
-          <a className="button secondary" href={marketsUrl} target="_blank">Open Odds Chart</a>
           <button className="danger" onClick={resetGame}>Reset Game</button>
         </div>
 
@@ -369,7 +367,6 @@ export default function AdminPage() {
               <h2>{state.game.title}</h2>
               <p>Voting link: <strong>{voteUrl}</strong></p>
               <p>Betting favorites link: <strong>{bettingUrl}</strong></p>
-              <p>Odds chart link: <strong>{marketsUrl}</strong></p>
               <p className="small">Reset keeps the player list but clears votes, rounds, immunities, eliminations, winner bets, and Top 4 bets.</p>
             </div>
 
