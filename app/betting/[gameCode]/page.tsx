@@ -81,8 +81,9 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
         <div className="card">
           <h2>How the odds work</h2>
           <p className="small">
-            These are fair American odds with no vig. Every active player's implied probability is normalized to add up to 100%.
-            Players with fewer cumulative elimination votes become stronger favorites. Players receiving more votes become longer shots.
+            These are fair American odds with no vig. Active players are normalized to roughly 100% total implied probability.
+            Fewer cumulative elimination votes help, more elimination votes hurt, immunity gives a modest temporary boost, and more winner bets gives a small momentum boost.
+            The board also starts with built-in Survivor history/host nudges for Justin, Anthony, Maura, Kyan, Megan, and Cole.
           </p>
           {board?.user_pick ? <p>Your current winner pick: <strong>{board.user_pick.player_name}</strong></p> : <p className="small">Click a player below to make your winner pick. You can change it later.</p>}
         </div>
@@ -95,7 +96,10 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
             <div className="card favoriteCard" key={p.id}>
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <h2 style={{ margin: 0 }}>{p.name}</h2>
-                {userPickId === p.id && <span className="status">Your Pick</span>}
+                <div className="row">
+                  {p.has_immunity && <span className="status">⭐ Immunity</span>}
+                  {userPickId === p.id && <span className="status">Your Pick</span>}
+                </div>
               </div>
 
               <div className="oddsNumber">{formatOdds(p.american_odds)}</div>
@@ -106,7 +110,8 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
 
               <p className="small">
                 Implied win probability: <strong>{Number(p.implied_probability || 0).toFixed(2)}%</strong><br />
-                Cumulative elimination votes: <strong>{p.total_votes_received}</strong>
+                Cumulative elimination votes: <strong>{p.total_votes_received}</strong><br />
+                Winner bets: <strong>{p.winner_bet_count || 0}</strong> ({Number(p.winner_bet_share || 0).toFixed(2)}%)
               </p>
 
               <button onClick={() => placeBet(p.id, p.name)} disabled={placing === p.id || p.is_eliminated}>
