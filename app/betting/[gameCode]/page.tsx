@@ -25,12 +25,16 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [placingWinner, setPlacingWinner] = useState("");
-  const [savingTop4, setSavingTop4] = useState(false);
+  const [savingPicks, setSavingPicks] = useState(false);
+  const [winnerPickId, setWinnerPickId] = useState<string>("");
   const [top4PickIds, setTop4PickIds] = useState<string[]>([]);
 
   const players = board?.players || [];
-  const userPickId = board?.user_pick?.player_id || null;
+  const savedWinnerPickId = board?.user_pick?.player_id || null;
+
+  const selectedWinnerName = useMemo(() => {
+    return players.find((p: any) => p.id === winnerPickId)?.name || "";
+  }, [winnerPickId, players]);
 
   const selectedTop4Names = useMemo(() => {
     return top4PickIds
@@ -50,6 +54,7 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
     if (error) setError(error.message);
     else {
       setBoard(data);
+      setWinnerPickId(data?.user_pick?.player_id || "");
       setTop4PickIds((data?.user_top4_picks || []).map((p: any) => p.player_id));
     }
     setLoading(false);
@@ -57,24 +62,10 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
 
   useEffect(() => { loadBoard(); }, [gameCode]);
 
-  async function placeWinnerBet(playerId: string, playerName: string) {
+  function chooseWinner(playerId: string) {
     setError("");
     setMessage("");
-    setPlacingWinner(playerId);
-
-    const voterSecret = getOrCreateVoterToken(gameCode);
-    const { data, error } = await supabase.rpc("place_survivor_winner_bet", {
-      p_game_code: gameCode,
-      p_player_id: playerId,
-      p_voter_secret: voterSecret,
-    });
-
-    if (error) setError(error.message);
-    else {
-      setMessage(data || `Your winner pick is now ${playerName}.`);
-      await loadBoard();
-    }
-    setPlacingWinner("");
+    setWinnerPickId(playerId);
   }
 
   function toggleTop4Pick(playerId: string) {
@@ -84,32 +75,62 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
     setTop4PickIds((current) => {
       if (current.includes(playerId)) return current.filter((id) => id !== playerId);
       if (current.length >= 4) {
-        setError("You can only pick 4 people to make the Top 4. Remove one first.");
+        setError("You already picked 4 people for Top 4. Remove one first.");
         return current;
       }
       return [...current, playerId];
     });
   }
 
-  async function saveTop4Picks() {
+  async function saveAllPicks() {
     setError("");
     setMessage("");
-    setSavingTop4(true);
 
+    if (!winnerPickId) {
+      setError("Pick one winner before saving.");
+      return;
+    }
+
+    if (top4PickIds.length !== 4) {
+      setError("Pick exactly 4 people to make Top 4 before saving.");
+      return;
+    }
+
+    if (!top4PickIds.includes(winnerPickId)) {
+      setError("Your winner pick has to be included in your Top 4 picks.");
+      return;
+    }
+
+    setSavingPicks(true);
     const voterSecret = getOrCreateVoterToken(gameCode);
-    const { data, error } = await supabase.rpc("set_survivor_top4_bets", {
+
+    const winnerResult = await supabase.rpc("place_survivor_winner_bet", {
+      p_game_code: gameCode,
+      p_player_id: winnerPickId,
+      p_voter_secret: voterSecret,
+    });
+
+    if (winnerResult.error) {
+      setError(winnerResult.error.message);
+      setSavingPicks(false);
+      return;
+    }
+
+    const top4Result = await supabase.rpc("set_survivor_top4_bets", {
       p_game_code: gameCode,
       p_player_ids: top4PickIds,
       p_voter_secret: voterSecret,
     });
 
-    if (error) setError(error.message);
-    else {
-      setMessage(data || "Top 4 picks saved.");
-      await loadBoard();
+    if (top4Result.error) {
+      setError(top4Result.error.message);
+      setSavingPicks(false);
+      return;
     }
 
-    setSavingTop4(false);
+    setMessage(`Saved: ${selectedWinnerName || "winner"} to win, and your 4 Top 4 picks.`);
+    await loadBoard();
+    setSavingPicks(false);
   }
 
   if (loading) return <main className="page"><div className="container hero">Loading betting board...</div></main>;
@@ -122,30 +143,31 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
 
         <div className="row">
           <Link className="button secondary" href={`/vote/${gameCode}`}>Back to Voting</Link>
-          <Link className="button secondary" href={`/markets/${gameCode}`}>Odds Chart</Link>
           <button className="secondary" onClick={loadBoard}>Refresh Odds</button>
+        </div>
+
+        <div className="card">
+          <h2>Make Your Picks</h2>
+          <p className="small">
+            You must choose <strong>one winner</strong> and <strong>exactly 4 Top 4 picks</strong> before saving. Your winner must also be included in your Top 4.
+            You can change these after each round; if you do not change them, your last saved picks stay in place.
+          </p>
+          <p>Winner pick: <strong>{selectedWinnerName || "None selected"}</strong></p>
+          <p>Top 4 picks: <strong>{top4PickIds.length}/4 selected</strong>{selectedTop4Names ? ` — ${selectedTop4Names}` : ""}</p>
+          <div className="row">
+            <button onClick={saveAllPicks} disabled={savingPicks}>{savingPicks ? "Saving..." : "Save Winner + Top 4 Picks"}</button>
+            <button className="secondary" onClick={() => { setWinnerPickId(""); setTop4PickIds([]); }}>Clear Unsaved Picks</button>
+          </div>
+          {savedWinnerPickId && <p className="small">Last saved winner pick: <strong>{board?.user_pick?.player_name}</strong></p>}
         </div>
 
         <div className="card">
           <h2>How the odds work</h2>
           <p className="small">
-            Win odds are fair American odds rounded to the nearest 10. They are normalized to roughly 100% total implied probability.
+            Win odds are fair American odds rounded to the nearest 10 and normalized to roughly 100% total implied probability.
             Fewer cumulative elimination votes help, more elimination votes hurt, immunity gives a modest temporary boost, and winner picks create a small momentum bump.
             Justin, Anthony, Maura, Kyan, Kyle, John, Megan, and Cole also have built-in starting nudges. If Maura or Kyan reach the final 3/4, they get a stronger host/friend-group late-game boost, with Maura favored over Kyan if both are alive.
           </p>
-          {board?.user_pick ? <p>Your current winner pick: <strong>{board.user_pick.player_name}</strong></p> : <p className="small">Click a player below to make your winner pick. You can change it later.</p>}
-        </div>
-
-        <div className="card">
-          <h2>Top 4 Picks</h2>
-          <p className="small">
-            Pick up to 4 people you think will make the Top 4. These picks stay saved until you change them.
-          </p>
-          <p><strong>{top4PickIds.length}/4 selected</strong>{selectedTop4Names ? ` — ${selectedTop4Names}` : ""}</p>
-          <div className="row">
-            <button onClick={saveTop4Picks} disabled={savingTop4}>{savingTop4 ? "Saving..." : "Save Top 4 Picks"}</button>
-            <button className="secondary" onClick={() => setTop4PickIds([])}>Clear Top 4 Picks</button>
-          </div>
         </div>
 
         {message && <div className="notice">{message}</div>}
@@ -154,13 +176,14 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
         <div className="grid">
           {players.map((p: any) => {
             const isTop4Pick = top4PickIds.includes(p.id);
+            const isWinnerPick = winnerPickId === p.id;
             return (
               <div className="card favoriteCard" key={p.id}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <h2 style={{ margin: 0 }}>{p.name}</h2>
                   <div className="row">
                     {p.has_immunity && <span className="status">⭐ Immunity</span>}
-                    {userPickId === p.id && <span className="status">Winner Pick</span>}
+                    {isWinnerPick && <span className="status">Winner Pick</span>}
                     {isTop4Pick && <span className="status">Top 4 Pick</span>}
                   </div>
                 </div>
@@ -192,8 +215,8 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
                 </p>
 
                 <div className="row">
-                  <button onClick={() => placeWinnerBet(p.id, p.name)} disabled={placingWinner === p.id || p.is_eliminated}>
-                    {userPickId === p.id ? "Keep Winner Pick" : "Pick to Win"}
+                  <button onClick={() => chooseWinner(p.id)} disabled={p.is_eliminated} className={isWinnerPick ? "secondary" : ""}>
+                    {isWinnerPick ? "Winner Selected" : "Pick to Win"}
                   </button>
                   <button className={isTop4Pick ? "secondary" : ""} onClick={() => toggleTop4Pick(p.id)} disabled={p.is_eliminated}>
                     {isTop4Pick ? "Remove Top 4" : "Pick Top 4"}
