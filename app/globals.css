@@ -1,4 +1,110 @@
-/* Add these classes to the bottom of app/globals.css */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: #070907;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, Helvetica, sans-serif;
+  background: radial-gradient(circle at top, #223b22 0%, #101610 42%, #070907 100%);
+  color: #f7f0dc;
+}
+
+a {
+  color: inherit;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.container {
+  width: min(1020px, 100%);
+  margin: 0 auto;
+}
+
+.hero {
+  padding: 28px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.35);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+
+h1 {
+  font-size: clamp(34px, 6vw, 68px);
+  margin: 0 0 8px;
+  letter-spacing: -1.5px;
+}
+
+h2 {
+  margin: 0 0 14px;
+}
+
+p {
+  line-height: 1.5;
+}
+
+.card {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+input, select {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  font-size: 16px;
+}
+
+button, .button {
+  border: 0;
+  border-radius: 14px;
+  padding: 13px 16px;
+  background: #f0c95a;
+  color: #171306;
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 15px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button.secondary, .button.secondary {
+  background: rgba(255,255,255,0.12);
+  color: #f7f0dc;
+  border: 1px solid rgba(255,255,255,0.16);
+}
+
+button.danger {
+  background: #ff6b5e;
+  color: #210604;
+}
 
 button.xButton {
   width: 36px;
@@ -10,6 +116,92 @@ button.xButton {
   color: #ffb5ae;
   font-size: 18px;
   line-height: 1;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.playerButton {
+  width: 100%;
+  text-align: left;
+  padding: 16px;
+  font-size: 18px;
+  background: rgba(255,255,255,0.09);
+  color: #f7f0dc;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+
+.playerButton.selected {
+  background: #f0c95a;
+  color: #171306;
+}
+
+.playerButton.eliminated {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.playerButton.immune {
+  opacity: 0.62;
+  background: rgba(240,201,90,0.11);
+  border: 1px solid rgba(240,201,90,0.35);
+}
+
+.small {
+  font-size: 13px;
+  opacity: 0.78;
+}
+
+.status {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(240,201,90,0.18);
+  border: 1px solid rgba(240,201,90,0.45);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.table th, .table td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  opacity: 0.72;
+}
+
+.notice {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(240,201,90,0.14);
+  border: 1px solid rgba(240,201,90,0.3);
+  margin-top: 12px;
+}
+
+.error {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255,107,94,0.14);
+  border: 1px solid rgba(255,107,94,0.35);
+  margin-top: 12px;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,0.13);
+  margin: 18px 0;
 }
 
 .barTrack {
@@ -37,4 +229,24 @@ button.xButton {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 16px;
+  }
+
+  .hero {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  button, .button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .row {
+    align-items: stretch;
+  }
 }
