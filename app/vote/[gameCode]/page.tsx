@@ -16,7 +16,7 @@ function getOrCreateVoterToken(gameCode: string) {
 export default function VotePage({ params }: { params: { gameCode: string } }) {
   const gameCode = params.gameCode.toUpperCase();
   const [state, setState] = useState<any>(null);
-  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,6 +32,7 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
       setError(error.message);
     } else {
       setState(data);
+      setSelectedPlayerIds([]);
     }
     setLoading(false);
   }
@@ -40,35 +41,53 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
     loadState();
   }, [gameCode]);
 
+  function togglePlayer(playerId: string) {
+    const maxPicks = Number(state?.active_round?.eliminated_count || 1);
+
+    setSelectedPlayerIds((current) => {
+      if (current.includes(playerId)) {
+        return current.filter((id) => id !== playerId);
+      }
+
+      if (current.length >= maxPicks) {
+        return current;
+      }
+
+      return [...current, playerId];
+    });
+  }
+
   async function submitVote() {
     setError("");
     setMessage("");
 
-    if (!selectedPlayerId) {
-      setError("Pick someone before submitting.");
+    const activeRound = state?.active_round;
+    const maxPicks = Number(activeRound?.eliminated_count || 1);
+
+    if (!activeRound?.id) {
+      setError("No open voting round right now.");
       return;
     }
 
-    const activeRound = state?.active_round;
-    if (!activeRound?.id) {
-      setError("No open voting round right now.");
+    if (selectedPlayerIds.length !== maxPicks) {
+      setError(`Pick exactly ${maxPicks} player${maxPicks === 1 ? "" : "s"} before submitting.`);
       return;
     }
 
     setSubmitting(true);
     const voterSecret = getOrCreateVoterToken(gameCode);
 
-    const { data, error } = await supabase.rpc("submit_survivor_vote", {
+    const { data, error } = await supabase.rpc("submit_survivor_votes", {
       p_game_code: gameCode,
       p_round_id: activeRound.id,
-      p_player_id: selectedPlayerId,
+      p_player_ids: selectedPlayerIds,
       p_voter_secret: voterSecret,
     });
 
     if (error) {
       setError(error.message);
     } else {
-      setMessage(data || "Vote submitted.");
+      setMessage(data || "Votes submitted.");
     }
 
     setSubmitting(false);
@@ -84,6 +103,7 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
 
   const activeRound = state?.active_round;
   const players = state?.players || [];
+  const maxPicks = Number(activeRound?.eliminated_count || 1);
 
   return (
     <main className="page">
@@ -103,11 +123,10 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
           <>
             <p>
               <span className="status">Round {activeRound.round_number}</span>{" "}
-              Vote for one person to eliminate.
+              Pick exactly {maxPicks} player{maxPicks === 1 ? "" : "s"} to eliminate.
             </p>
             <p className="small">
-              This round eliminates {activeRound.eliminated_count} player
-              {activeRound.eliminated_count === 1 ? "" : "s"}.
+              Selected {selectedPlayerIds.length} of {maxPicks}.
             </p>
 
             <div className="grid">
@@ -115,11 +134,11 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
                 <button
                   key={player.id}
                   className={
-                    selectedPlayerId === player.id
+                    selectedPlayerIds.includes(player.id)
                       ? "playerButton selected"
                       : "playerButton"
                   }
-                  onClick={() => setSelectedPlayerId(player.id)}
+                  onClick={() => togglePlayer(player.id)}
                 >
                   {player.name}
                 </button>
