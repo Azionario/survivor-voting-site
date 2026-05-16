@@ -14,6 +14,7 @@ export default function AdminPage() {
   const [results, setResults] = useState<any[]>([]);
   const [betStats, setBetStats] = useState<any[]>([]);
   const [top4Stats, setTop4Stats] = useState<any[]>([]);
+  const [bettingHistory, setBettingHistory] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -140,6 +141,7 @@ export default function AdminPage() {
     if (selectedRoundId) await getResults(selectedRoundId);
     await getBetStats();
     await getTop4Stats();
+    await getBettingHistory();
   }
 
   async function resetGame() {
@@ -169,6 +171,7 @@ export default function AdminPage() {
     setResults([]);
     setBetStats([]);
     setTop4Stats([]);
+    setBettingHistory(null);
     setImmunityPlayerIds([]);
     setSelectedRoundId("");
     setMessage(data || "Game reset.");
@@ -297,6 +300,33 @@ export default function AdminPage() {
     setTop4Stats(data || []);
   }
 
+  async function getBettingHistory() {
+    setError("");
+    setMessage("");
+
+    const { data, error } = await supabase.rpc("get_survivor_admin_betting_history", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setBettingHistory(data || null);
+  }
+
+  function renderPickCounts(items: any[] | undefined) {
+    if (!items || !items.length) return "None yet";
+    return items.map((item) => `${item.player_name} ×${item.count}`).join(", ");
+  }
+
+  function formatAdminOdds(value: number | null | undefined) {
+    if (value === null || value === undefined) return "N/A";
+    return value > 0 ? `+${value}` : `${value}`;
+  }
+
   async function eliminateTopPlayers() {
     const round = state?.rounds?.find((r: any) => r.id === selectedRoundId);
     if (!round) {
@@ -367,7 +397,7 @@ export default function AdminPage() {
               <h2>{state.game.title}</h2>
               <p>Voting link: <strong>{voteUrl}</strong></p>
               <p>Betting favorites link: <strong>{bettingUrl}</strong></p>
-              <p className="small">Reset keeps the player list but clears votes, rounds, immunities, eliminations, winner bets, and Top 4 bets.</p>
+              <p className="small">Reset keeps the player list but clears votes, rounds, immunities, eliminations, betting picks, bettor names, and betting history.</p>
             </div>
 
             <div className="card">
@@ -479,6 +509,99 @@ export default function AdminPage() {
             )}
 
 
+
+
+            <div className="card">
+              <h2>Betting History / Prize Tracker</h2>
+              <p className="small">Tracks each person's saved winner and Top 4 picks by round, including the odds at the time they saved.</p>
+              <button className="secondary" onClick={getBettingHistory}>Load Betting History</button>
+
+              {bettingHistory?.final_winner && (
+                <div className="notice">
+                  Final winner detected: <strong>{bettingHistory.final_winner.player_name}</strong>. Prize leaders are ranked by the longest odds where someone picked that winner.
+                </div>
+              )}
+
+              {bettingHistory?.prize_leaders?.length > 0 && (
+                <>
+                  <h3>Prize Leaders — Longest Odds on Final Winner</h3>
+                  <table className="table">
+                    <thead>
+                      <tr><th>Bettor</th><th>Times Picked Winner</th><th>Longest Odds</th><th>First Time On Winner</th></tr>
+                    </thead>
+                    <tbody>
+                      {bettingHistory.prize_leaders.map((p: any, i: number) => (
+                        <tr key={`${p.bettor_name}-${i}`}>
+                          <td>{p.bettor_name}</td>
+                          <td>{p.times_picked_winner}</td>
+                          <td>{formatAdminOdds(p.longest_winner_odds)}</td>
+                          <td>{p.first_time_on_winner ? new Date(p.first_time_on_winner).toLocaleString() : "N/A"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {bettingHistory && !bettingHistory.final_winner && (
+                <p className="small">Prize leaders will appear automatically once only one player remains active.</p>
+              )}
+
+              {bettingHistory?.bettor_summary?.length > 0 && (
+                <>
+                  <h3>Bettor Summary</h3>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Bettor</th>
+                        <th>Rounds Saved</th>
+                        <th>Avg Winner Odds</th>
+                        <th>Avg Top 4 Odds</th>
+                        <th>Winner Picks</th>
+                        <th>Top 4 Picks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bettingHistory.bettor_summary.map((b: any, i: number) => (
+                        <tr key={`${b.bettor_name}-${i}`}>
+                          <td>{b.bettor_name}</td>
+                          <td>{b.submission_count}</td>
+                          <td>{formatAdminOdds(b.avg_winner_odds)}</td>
+                          <td>{formatAdminOdds(b.avg_top4_odds)}</td>
+                          <td>{renderPickCounts(b.winner_pick_counts)}</td>
+                          <td>{renderPickCounts(b.top4_pick_counts)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {bettingHistory?.submissions?.length > 0 && (
+                <>
+                  <h3>Round-by-Round Saved Picks</h3>
+                  <table className="table">
+                    <thead>
+                      <tr><th>Bettor</th><th>Round</th><th>Winner Pick</th><th>Winner Odds</th><th>Top 4 Picks</th><th>Saved</th></tr>
+                    </thead>
+                    <tbody>
+                      {bettingHistory.submissions.map((s: any, i: number) => (
+                        <tr key={`${s.bettor_name}-${s.round_number}-${i}`}>
+                          <td>{s.bettor_name}</td>
+                          <td>{s.round_number ? `Round ${s.round_number}` : "Pre-game"}</td>
+                          <td>{s.winner_player_name}</td>
+                          <td>{formatAdminOdds(s.winner_american_odds)}</td>
+                          <td>
+                            {(s.top4_snapshot || []).map((p: any) => `${p.name} (${formatAdminOdds(p.top4_american_odds)})`).join(", ")}
+                          </td>
+                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : "N/A"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
 
             <div className="card">
               <h2>Top 4 Bet Chart</h2>
