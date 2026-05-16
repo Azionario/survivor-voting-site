@@ -10,12 +10,17 @@ export default function AdminPage() {
   const [newPlayer, setNewPlayer] = useState("");
   const [eliminatedCount, setEliminatedCount] = useState(1);
   const [selectedRoundId, setSelectedRoundId] = useState("");
+  const [immunityPlayerIds, setImmunityPlayerIds] = useState<string[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [betStats, setBetStats] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const latestRound = useMemo(() => state?.rounds?.[0] || null, [state]);
+  const activePlayers = useMemo(
+    () => (state?.players || []).filter((p: any) => !p.is_eliminated),
+    [state]
+  );
 
   async function loadAdminState() {
     setError("");
@@ -32,7 +37,61 @@ export default function AdminPage() {
 
     setState(data);
     const firstRound = data?.rounds?.[0]?.id || "";
-    setSelectedRoundId((current) => current || firstRound);
+    const roundToLoad = selectedRoundId || firstRound;
+    setSelectedRoundId(roundToLoad);
+    if (roundToLoad) await loadImmunities(roundToLoad);
+  }
+
+  async function loadImmunities(roundId = selectedRoundId) {
+    if (!roundId) {
+      setImmunityPlayerIds([]);
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("get_survivor_round_immunities", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+      p_round_id: roundId,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setImmunityPlayerIds(data?.player_ids || []);
+  }
+
+  async function saveImmunities() {
+    setError("");
+    setMessage("");
+
+    if (!selectedRoundId) {
+      setError("Pick a round first.");
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("set_survivor_round_immunities", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+      p_round_id: selectedRoundId,
+      p_player_ids: immunityPlayerIds,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setMessage(data || "Immunity saved.");
+    await loadImmunities(selectedRoundId);
+  }
+
+  function toggleImmunity(playerId: string) {
+    setImmunityPlayerIds((current) => {
+      if (current.includes(playerId)) return current.filter((id) => id !== playerId);
+      return [...current, playerId];
+    });
   }
 
   async function addPlayer() {
@@ -60,7 +119,7 @@ export default function AdminPage() {
     setError("");
     setMessage("");
 
-    const confirmed = window.confirm(`Remove ${playerName}? This also removes their votes and winner bets.`);
+    const confirmed = window.confirm(`Remove ${playerName}? This also removes their votes, immunities, and winner bets.`);
     if (!confirmed) return;
 
     const { error } = await supabase.rpc("delete_survivor_player", {
@@ -74,6 +133,7 @@ export default function AdminPage() {
       return;
     }
 
+    setImmunityPlayerIds((current) => current.filter((id) => id !== playerId));
     setMessage(`${playerName} removed.`);
     await loadAdminState();
     if (selectedRoundId) await getResults(selectedRoundId);
@@ -85,7 +145,7 @@ export default function AdminPage() {
     setMessage("");
 
     const first = window.confirm(
-      "Reset the game? This will clear all votes, rounds, eliminations, and winner bets, but it will KEEP the player list."
+      "Reset the game? This will clear all votes, rounds, immunities, eliminations, and winner bets, but it will KEEP the player list."
     );
     if (!first) return;
 
@@ -106,6 +166,7 @@ export default function AdminPage() {
 
     setResults([]);
     setBetStats([]);
+    setImmunityPlayerIds([]);
     setSelectedRoundId("");
     setMessage(data || "Game reset.");
     await loadAdminState();
@@ -126,10 +187,12 @@ export default function AdminPage() {
       return;
     }
 
-    setMessage("Round started. Everyone can vote again for this new round.");
+    setMessage("Round started. Everyone can vote again for this new round. Set immunity below if needed.");
     setSelectedRoundId(data);
+    setImmunityPlayerIds([]);
     setResults([]);
     await loadAdminState();
+    await loadImmunities(data);
   }
 
   async function lockRound(roundId: string) {
@@ -255,7 +318,7 @@ export default function AdminPage() {
     <main className="page">
       <div className="container hero">
         <h1>Host Admin</h1>
-        <p>Manage the party, rounds, votes, eliminations, and betting favorites.</p>
+        <p>Manage the party, rounds, immunity, votes, eliminations, and betting favorites.</p>
 
         <div className="grid">
           <label>
@@ -284,7 +347,7 @@ export default function AdminPage() {
               <h2>{state.game.title}</h2>
               <p>Voting link: <strong>{voteUrl}</strong></p>
               <p>Betting favorites link: <strong>{bettingUrl}</strong></p>
-              <p className="small">Reset keeps the player list but clears votes, rounds, eliminations, and winner bets.</p>
+              <p className="small">Reset keeps the player list but clears votes, rounds, immunities, eliminations, and winner bets.</p>
             </div>
 
             <div className="card">
@@ -322,12 +385,53 @@ export default function AdminPage() {
 
               {latestRound && <p>Latest round: Round {latestRound.round_number} — <span className="status">{latestRound.status}</span></p>}
 
-              <select value={selectedRoundId} onChange={(e) => { setSelectedRoundId(e.target.value); setResults([]); }}>
+              <select
+                value={selectedRoundId}
+                onChange={async (e) => {
+                  const roundId = e.target.value;
+                  setSelectedRoundId(roundId);
+                  setResults([]);
+                  await loadImmunities(roundId);
+                }}
+              >
                 <option value="">Select round</option>
                 {state.rounds.map((r: any) => (
                   <option key={r.id} value={r.id}>Round {r.round_number} — {r.status} — eliminates {r.eliminated_count}</option>
                 ))}
               </select>
+
+              <div className="card">
+                <h2>⭐ Immunity for Selected Round</h2>
+                <p className="small">Anyone checked here cannot be voted for in this round. They also receive a small odds boost on Betting Favorites.</p>
+
+                {!selectedRoundId && <div className="notice">Select or start a round first.</div>}
+
+                {selectedRoundId && (
+                  <>
+                    <div className="grid">
+                      {activePlayers.map((p: any) => (
+                        <label key={p.id} className="card" style={{ marginTop: 0, cursor: "pointer" }}>
+                          <div className="row" style={{ justifyContent: "space-between" }}>
+                            <strong>{p.name}</strong>
+                            <input
+                              type="checkbox"
+                              checked={immunityPlayerIds.includes(p.id)}
+                              onChange={() => toggleImmunity(p.id)}
+                              style={{ width: 22, height: 22 }}
+                            />
+                          </div>
+                          {immunityPlayerIds.includes(p.id) && <span className="status">⭐ Immune</span>}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="row" style={{ marginTop: 12 }}>
+                      <button onClick={saveImmunities}>Save Immunity</button>
+                      <button className="secondary" onClick={() => setImmunityPlayerIds([])}>Clear Checks</button>
+                      <button className="secondary" onClick={() => loadImmunities(selectedRoundId)}>Reload Saved Immunity</button>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <div className="row" style={{ marginTop: 12 }}>
                 <button className="secondary" onClick={() => getResults()}>Load Results</button>
