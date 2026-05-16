@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -28,31 +29,21 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
       p_game_code: gameCode,
     });
 
-    if (error) {
-      setError(error.message);
-    } else {
+    if (error) setError(error.message);
+    else {
       setState(data);
       setSelectedPlayerIds([]);
     }
     setLoading(false);
   }
 
-  useEffect(() => {
-    loadState();
-  }, [gameCode]);
+  useEffect(() => { loadState(); }, [gameCode]);
 
   function togglePlayer(playerId: string) {
     const maxPicks = Number(state?.active_round?.eliminated_count || 1);
-
     setSelectedPlayerIds((current) => {
-      if (current.includes(playerId)) {
-        return current.filter((id) => id !== playerId);
-      }
-
-      if (current.length >= maxPicks) {
-        return current;
-      }
-
+      if (current.includes(playerId)) return current.filter((id) => id !== playerId);
+      if (current.length >= maxPicks) return current;
       return [...current, playerId];
     });
   }
@@ -84,22 +75,13 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
       p_voter_secret: voterSecret,
     });
 
-    if (error) {
-      setError(error.message);
-    } else {
-      setMessage(data || "Votes submitted.");
-    }
+    if (error) setError(error.message);
+    else setMessage(data || "Votes submitted.");
 
     setSubmitting(false);
   }
 
-  if (loading) {
-    return (
-      <main className="page">
-        <div className="container hero">Loading...</div>
-      </main>
-    );
-  }
+  if (loading) return <main className="page"><div className="container hero">Loading...</div></main>;
 
   const activeRound = state?.active_round;
   const players = state?.players || [];
@@ -109,35 +91,24 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
     <main className="page">
       <div className="container hero">
         <h1>{state?.game?.title || "Survivor Voting"}</h1>
-        <p>
-          Game code: <strong>{gameCode}</strong>
-        </p>
+        <p>Game code: <strong>{gameCode}</strong></p>
 
-        {!activeRound && (
-          <div className="notice">
-            Voting is not open right now. Wait for the host to start the next round.
-          </div>
-        )}
+        <div className="row">
+          <Link className="button secondary" href={`/betting/${gameCode}`}>Betting Favorites</Link>
+        </div>
+
+        {!activeRound && <div className="notice">Voting is not open right now. Wait for the host to start the next round.</div>}
 
         {activeRound && (
           <>
-            <p>
-              <span className="status">Round {activeRound.round_number}</span>{" "}
-              Pick exactly {maxPicks} player{maxPicks === 1 ? "" : "s"} to eliminate.
-            </p>
-            <p className="small">
-              Selected {selectedPlayerIds.length} of {maxPicks}.
-            </p>
+            <p><span className="status">Round {activeRound.round_number}</span> Pick exactly {maxPicks} player{maxPicks === 1 ? "" : "s"} to eliminate.</p>
+            <p className="small">Selected {selectedPlayerIds.length} of {maxPicks}.</p>
 
             <div className="grid">
               {players.map((player: any) => (
                 <button
                   key={player.id}
-                  className={
-                    selectedPlayerIds.includes(player.id)
-                      ? "playerButton selected"
-                      : "playerButton"
-                  }
+                  className={selectedPlayerIds.includes(player.id) ? "playerButton selected" : "playerButton"}
                   onClick={() => togglePlayer(player.id)}
                 >
                   {player.name}
@@ -146,12 +117,8 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
             </div>
 
             <div className="card">
-              <button onClick={submitVote} disabled={submitting}>
-                {submitting ? "Submitting..." : "Submit Vote"}
-              </button>
-              <button className="secondary" onClick={loadState} style={{ marginLeft: 10 }}>
-                Refresh
-              </button>
+              <button onClick={submitVote} disabled={submitting}>{submitting ? "Submitting..." : "Submit Vote"}</button>
+              <button className="secondary" onClick={loadState} style={{ marginLeft: 10 }}>Refresh</button>
             </div>
           </>
         )}
@@ -159,9 +126,7 @@ export default function VotePage({ params }: { params: { gameCode: string } }) {
         {message && <div className="notice">{message}</div>}
         {error && <div className="error">{error}</div>}
 
-        <p className="small">
-          Voting is anonymous to the group, but each phone/browser can only vote once per round.
-        </p>
+        <p className="small">Voting is anonymous to the group, but each phone/browser can only vote once per round.</p>
       </div>
     </main>
   );
