@@ -11,12 +11,11 @@ export default function AdminPage() {
   const [eliminatedCount, setEliminatedCount] = useState(1);
   const [selectedRoundId, setSelectedRoundId] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  const [betStats, setBetStats] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const latestRound = useMemo(() => {
-    return state?.rounds?.[0] || null;
-  }, [state]);
+  const latestRound = useMemo(() => state?.rounds?.[0] || null, [state]);
 
   async function loadAdminState() {
     setError("");
@@ -61,7 +60,7 @@ export default function AdminPage() {
     setError("");
     setMessage("");
 
-    const confirmed = window.confirm(`Remove ${playerName}? This also removes their related votes.`);
+    const confirmed = window.confirm(`Remove ${playerName}? This also removes their votes and winner bets.`);
     if (!confirmed) return;
 
     const { error } = await supabase.rpc("delete_survivor_player", {
@@ -78,6 +77,38 @@ export default function AdminPage() {
     setMessage(`${playerName} removed.`);
     await loadAdminState();
     if (selectedRoundId) await getResults(selectedRoundId);
+    await getBetStats();
+  }
+
+  async function resetGame() {
+    setError("");
+    setMessage("");
+
+    const first = window.confirm(
+      "Reset the game? This will clear all votes, rounds, eliminations, and winner bets, but it will KEEP the player list."
+    );
+    if (!first) return;
+
+    const second = window.confirm(
+      "Final confirmation: are you absolutely sure? This cannot be undone."
+    );
+    if (!second) return;
+
+    const { data, error } = await supabase.rpc("reset_survivor_game", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setResults([]);
+    setBetStats([]);
+    setSelectedRoundId("");
+    setMessage(data || "Game reset.");
+    await loadAdminState();
   }
 
   async function startRound() {
@@ -95,8 +126,9 @@ export default function AdminPage() {
       return;
     }
 
-    setMessage("Round started.");
+    setMessage("Round started. Everyone can vote again for this new round.");
     setSelectedRoundId(data);
+    setResults([]);
     await loadAdminState();
   }
 
@@ -165,6 +197,23 @@ export default function AdminPage() {
     setResults(data || []);
   }
 
+  async function getBetStats() {
+    setError("");
+    setMessage("");
+
+    const { data, error } = await supabase.rpc("get_survivor_admin_bets", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setBetStats(data || []);
+  }
+
   async function eliminateTopPlayers() {
     const round = state?.rounds?.find((r: any) => r.id === selectedRoundId);
     if (!round) {
@@ -198,21 +247,15 @@ export default function AdminPage() {
     await loadAdminState();
   }
 
-  const voteUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/vote/${gameCode.toUpperCase()}`
-      : `/vote/${gameCode.toUpperCase()}`;
-
-  const resultsUrl =
-    typeof window !== "undefined" && selectedRoundId
-      ? `${window.location.origin}/results/${gameCode.toUpperCase()}?round=${selectedRoundId}`
-      : "";
+  const voteUrl = typeof window !== "undefined" ? `${window.location.origin}/vote/${gameCode.toUpperCase()}` : `/vote/${gameCode.toUpperCase()}`;
+  const bettingUrl = typeof window !== "undefined" ? `${window.location.origin}/betting/${gameCode.toUpperCase()}` : `/betting/${gameCode.toUpperCase()}`;
+  const resultsUrl = typeof window !== "undefined" && selectedRoundId ? `${window.location.origin}/results/${gameCode.toUpperCase()}?round=${selectedRoundId}` : "";
 
   return (
     <main className="page">
       <div className="container hero">
         <h1>Host Admin</h1>
-        <p>Manage the party, rounds, votes, and eliminations.</p>
+        <p>Manage the party, rounds, votes, eliminations, and betting favorites.</p>
 
         <div className="grid">
           <label>
@@ -227,9 +270,9 @@ export default function AdminPage() {
 
         <div className="card row">
           <button onClick={loadAdminState}>Load Game</button>
-          <a className="button secondary" href={voteUrl} target="_blank">
-            Open Voting Page
-          </a>
+          <a className="button secondary" href={voteUrl} target="_blank">Open Voting Page</a>
+          <a className="button secondary" href={bettingUrl} target="_blank">Open Betting Favorites</a>
+          <button className="danger" onClick={resetGame}>Reset Game</button>
         </div>
 
         {message && <div className="notice">{message}</div>}
@@ -239,44 +282,28 @@ export default function AdminPage() {
           <>
             <div className="card">
               <h2>{state.game.title}</h2>
-              <p>
-                Voting link: <strong>{voteUrl}</strong>
-              </p>
-              <p className="small">
-                Send this link to guests or turn it into a QR code.
-              </p>
+              <p>Voting link: <strong>{voteUrl}</strong></p>
+              <p>Betting favorites link: <strong>{bettingUrl}</strong></p>
+              <p className="small">Reset keeps the player list but clears votes, rounds, eliminations, and winner bets.</p>
             </div>
 
             <div className="card">
               <h2>Players</h2>
               <div className="row">
-                <input
-                  placeholder="Add player name"
-                  value={newPlayer}
-                  onChange={(e) => setNewPlayer(e.target.value)}
-                  style={{ flex: 1, minWidth: 220 }}
-                />
+                <input placeholder="Add player name" value={newPlayer} onChange={(e) => setNewPlayer(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
                 <button onClick={addPlayer}>Add Player</button>
               </div>
 
               <table className="table">
                 <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Manage</th>
-                  </tr>
+                  <tr><th>Name</th><th>Status</th><th>Remove</th></tr>
                 </thead>
                 <tbody>
                   {state.players.map((p: any) => (
                     <tr key={p.id}>
                       <td>{p.name}</td>
                       <td>{p.is_eliminated ? "Eliminated" : "Active"}</td>
-                      <td>
-                        <button className="danger" onClick={() => deletePlayer(p.id, p.name)}>
-                          Remove
-                        </button>
-                      </td>
+                      <td><button className="xButton" onClick={() => deletePlayer(p.id, p.name)} title={`Remove ${p.name}`}>×</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -288,90 +315,66 @@ export default function AdminPage() {
               <div className="row">
                 <label style={{ maxWidth: 260 }}>
                   <span className="small">People eliminated this round</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={eliminatedCount}
-                    onChange={(e) => setEliminatedCount(Number(e.target.value))}
-                  />
+                  <input type="number" min="1" value={eliminatedCount} onChange={(e) => setEliminatedCount(Number(e.target.value))} />
                 </label>
                 <button onClick={startRound}>Start New Round</button>
               </div>
 
-              {latestRound && (
-                <p>
-                  Latest round: Round {latestRound.round_number} —{" "}
-                  <span className="status">{latestRound.status}</span>
-                </p>
-              )}
+              {latestRound && <p>Latest round: Round {latestRound.round_number} — <span className="status">{latestRound.status}</span></p>}
 
-              <select
-                value={selectedRoundId}
-                onChange={(e) => {
-                  setSelectedRoundId(e.target.value);
-                  setResults([]);
-                }}
-              >
+              <select value={selectedRoundId} onChange={(e) => { setSelectedRoundId(e.target.value); setResults([]); }}>
                 <option value="">Select round</option>
                 {state.rounds.map((r: any) => (
-                  <option key={r.id} value={r.id}>
-                    Round {r.round_number} — {r.status} — eliminates {r.eliminated_count}
-                  </option>
+                  <option key={r.id} value={r.id}>Round {r.round_number} — {r.status} — eliminates {r.eliminated_count}</option>
                 ))}
               </select>
 
               <div className="row" style={{ marginTop: 12 }}>
-                <button className="secondary" onClick={() => getResults()}>
-                  Load Results
-                </button>
-                <button className="secondary" onClick={() => lockRound(selectedRoundId)}>
-                  Lock Voting
-                </button>
-                <button onClick={() => revealRound(selectedRoundId)}>
-                  Reveal Results
-                </button>
-                <button className="secondary" onClick={() => reopenRound(selectedRoundId)}>
-                  Reopen
-                </button>
+                <button className="secondary" onClick={() => getResults()}>Load Results</button>
+                <button className="secondary" onClick={() => lockRound(selectedRoundId)}>Lock Voting</button>
+                <button onClick={() => revealRound(selectedRoundId)}>Reveal Results</button>
+                <button className="secondary" onClick={() => reopenRound(selectedRoundId)}>Reopen</button>
               </div>
 
-              {resultsUrl && (
-                <p className="small">
-                  Public results link after reveal: <strong>{resultsUrl}</strong>
-                </p>
-              )}
+              {resultsUrl && <p className="small">Public results link after reveal: <strong>{resultsUrl}</strong></p>}
             </div>
 
             {results.length > 0 && (
               <div className="card">
                 <h2>Results</h2>
                 <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Player</th>
-                      <th>Votes</th>
-                      <th>Rank</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Player</th><th>Votes</th><th>Rank</th></tr></thead>
                   <tbody>
-                    {results.map((r) => (
-                      <tr key={r.player_id}>
-                        <td>{r.player_name}</td>
-                        <td>{r.vote_count}</td>
-                        <td>{r.vote_rank}</td>
+                    {results.map((r) => <tr key={r.player_id}><td>{r.player_name}</td><td>{r.vote_count}</td><td>{r.vote_rank}</td></tr>)}
+                  </tbody>
+                </table>
+                <hr />
+                <button className="danger" onClick={eliminateTopPlayers}>Mark Top Vote-Getters Eliminated</button>
+                <p className="small">If there is a tie, handle it manually before using this button.</p>
+              </div>
+            )}
+
+            <div className="card">
+              <h2>Winner Bet Chart</h2>
+              <p className="small">Shows who guests are picking to win on the Betting Favorites page.</p>
+              <button className="secondary" onClick={getBetStats}>Load Betting Chart</button>
+
+              {betStats.length > 0 && (
+                <table className="table">
+                  <thead><tr><th>Player</th><th>Bets</th><th>Share</th><th>Chart</th></tr></thead>
+                  <tbody>
+                    {betStats.map((b) => (
+                      <tr key={b.player_id}>
+                        <td>{b.player_name}{b.is_eliminated ? " (Eliminated)" : ""}</td>
+                        <td>{b.bet_count}</td>
+                        <td>{Number(b.bet_share || 0).toFixed(2)}%</td>
+                        <td><div className="barTrack"><div className="barFill" style={{ width: `${Math.max(0, Math.min(100, Number(b.bet_share || 0)))}%` }} /></div></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <hr />
-                <button className="danger" onClick={eliminateTopPlayers}>
-                  Mark Top Vote-Getters Eliminated
-                </button>
-                <p className="small">
-                  If there is a tie, handle it manually before using this button.
-                </p>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>
