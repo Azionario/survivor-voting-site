@@ -13,6 +13,7 @@ export default function AdminPage() {
   const [immunityPlayerIds, setImmunityPlayerIds] = useState<string[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [betStats, setBetStats] = useState<any[]>([]);
+  const [top4Stats, setTop4Stats] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -138,6 +139,7 @@ export default function AdminPage() {
     await loadAdminState();
     if (selectedRoundId) await getResults(selectedRoundId);
     await getBetStats();
+    await getTop4Stats();
   }
 
   async function resetGame() {
@@ -166,6 +168,7 @@ export default function AdminPage() {
 
     setResults([]);
     setBetStats([]);
+    setTop4Stats([]);
     setImmunityPlayerIds([]);
     setSelectedRoundId("");
     setMessage(data || "Game reset.");
@@ -277,6 +280,23 @@ export default function AdminPage() {
     setBetStats(data || []);
   }
 
+  async function getTop4Stats() {
+    setError("");
+    setMessage("");
+
+    const { data, error } = await supabase.rpc("get_survivor_admin_top4_bets", {
+      p_game_code: gameCode.toUpperCase(),
+      p_admin_pin: pin,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setTop4Stats(data || []);
+  }
+
   async function eliminateTopPlayers() {
     const round = state?.rounds?.find((r: any) => r.id === selectedRoundId);
     if (!round) {
@@ -312,6 +332,7 @@ export default function AdminPage() {
 
   const voteUrl = typeof window !== "undefined" ? `${window.location.origin}/vote/${gameCode.toUpperCase()}` : `/vote/${gameCode.toUpperCase()}`;
   const bettingUrl = typeof window !== "undefined" ? `${window.location.origin}/betting/${gameCode.toUpperCase()}` : `/betting/${gameCode.toUpperCase()}`;
+  const marketsUrl = typeof window !== "undefined" ? `${window.location.origin}/markets/${gameCode.toUpperCase()}` : `/markets/${gameCode.toUpperCase()}`;
   const resultsUrl = typeof window !== "undefined" && selectedRoundId ? `${window.location.origin}/results/${gameCode.toUpperCase()}?round=${selectedRoundId}` : "";
 
   return (
@@ -335,6 +356,7 @@ export default function AdminPage() {
           <button onClick={loadAdminState}>Load Game</button>
           <a className="button secondary" href={voteUrl} target="_blank">Open Voting Page</a>
           <a className="button secondary" href={bettingUrl} target="_blank">Open Betting Favorites</a>
+          <a className="button secondary" href={marketsUrl} target="_blank">Open Odds Chart</a>
           <button className="danger" onClick={resetGame}>Reset Game</button>
         </div>
 
@@ -347,7 +369,8 @@ export default function AdminPage() {
               <h2>{state.game.title}</h2>
               <p>Voting link: <strong>{voteUrl}</strong></p>
               <p>Betting favorites link: <strong>{bettingUrl}</strong></p>
-              <p className="small">Reset keeps the player list but clears votes, rounds, immunities, eliminations, and winner bets.</p>
+              <p>Odds chart link: <strong>{marketsUrl}</strong></p>
+              <p className="small">Reset keeps the player list but clears votes, rounds, immunities, eliminations, winner bets, and Top 4 bets.</p>
             </div>
 
             <div className="card">
@@ -457,6 +480,30 @@ export default function AdminPage() {
                 <p className="small">If there is a tie, handle it manually before using this button.</p>
               </div>
             )}
+
+
+
+            <div className="card">
+              <h2>Top 4 Bet Chart</h2>
+              <p className="small">Shows who guests are picking to make the Top 4 on the Betting Favorites page.</p>
+              <button className="secondary" onClick={getTop4Stats}>Load Top 4 Chart</button>
+
+              {top4Stats.length > 0 && (
+                <table className="table">
+                  <thead><tr><th>Player</th><th>Top 4 Picks</th><th>Share of Picks</th><th>Chart</th></tr></thead>
+                  <tbody>
+                    {top4Stats.map((b) => (
+                      <tr key={b.player_id}>
+                        <td>{b.player_name}{b.is_eliminated ? " (Eliminated)" : ""}</td>
+                        <td>{b.bet_count}</td>
+                        <td>{Number(b.bet_share || 0).toFixed(2)}%</td>
+                        <td><div className="barTrack"><div className="barFill" style={{ width: `${Math.max(0, Math.min(100, Number(b.bet_share || 0)))}%` }} /></div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
 
             <div className="card">
               <h2>Winner Bet Chart</h2>
