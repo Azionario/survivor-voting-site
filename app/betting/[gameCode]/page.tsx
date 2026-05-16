@@ -28,6 +28,11 @@ function formatOdds(value: number | null) {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) return "N/A";
+  return `${Number(value).toFixed(2)}%`;
+}
+
 export default function BettingPage({ params }: { params: { gameCode: string } }) {
   const gameCode = params.gameCode.toUpperCase();
   const [board, setBoard] = useState<any>(null);
@@ -40,6 +45,7 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
   const [top4PickIds, setTop4PickIds] = useState<string[]>([]);
 
   const players = board?.players || [];
+  const top4OddsLocked = Number(board?.active_count || 0) <= 4;
 
   const selectedWinnerName = useMemo(() => {
     return players.find((p: any) => p.id === winnerPickId)?.name || "";
@@ -177,6 +183,12 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
           </div>
         </div>
 
+        {top4OddsLocked && (
+          <div className="notice">
+            Top 4 odds are now N/A because only 4 or fewer players remain. Everyone still active has already made the Top 4.
+          </div>
+        )}
+
         {message && <div className="notice">{message}</div>}
         {error && <div className="error">{error}</div>}
 
@@ -209,9 +221,9 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
                     <div className="small">Make Top 4</div>
                     <div className="oddsNumber">{formatOdds(p.top4_american_odds)}</div>
                     <div className="barTrack">
-                      <div className="barFill" style={{ width: `${Math.max(0, Math.min(100, Number(p.top4_implied_probability || 0)))}%` }} />
+                      <div className="barFill" style={{ width: top4OddsLocked ? "0%" : `${Math.max(0, Math.min(100, Number(p.top4_implied_probability || 0)))}%` }} />
                     </div>
-                    <p className="small"><strong>{Number(p.top4_implied_probability || 0).toFixed(2)}%</strong> implied</p>
+                    <p className="small"><strong>{formatPercent(p.top4_implied_probability)}</strong> implied</p>
                   </div>
                 </div>
 
