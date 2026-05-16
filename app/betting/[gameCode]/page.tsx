@@ -14,6 +14,15 @@ function getOrCreateVoterToken(gameCode: string) {
   return token;
 }
 
+function getStoredName(gameCode: string) {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(`survivor-voter-name-${gameCode}`) || "";
+}
+
+function storeName(gameCode: string, name: string) {
+  window.localStorage.setItem(`survivor-voter-name-${gameCode}`, name);
+}
+
 function formatOdds(value: number | null) {
   if (value === null || value === undefined) return "N/A";
   return value > 0 ? `+${value}` : `${value}`;
@@ -22,6 +31,7 @@ function formatOdds(value: number | null) {
 export default function BettingPage({ params }: { params: { gameCode: string } }) {
   const gameCode = params.gameCode.toUpperCase();
   const [board, setBoard] = useState<any>(null);
+  const [voterName, setVoterName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -30,7 +40,6 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
   const [top4PickIds, setTop4PickIds] = useState<string[]>([]);
 
   const players = board?.players || [];
-  const savedWinnerPickId = board?.user_pick?.player_id || null;
 
   const selectedWinnerName = useMemo(() => {
     return players.find((p: any) => p.id === winnerPickId)?.name || "";
@@ -56,6 +65,10 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
       setBoard(data);
       setWinnerPickId(data?.user_pick?.player_id || "");
       setTop4PickIds((data?.user_top4_picks || []).map((p: any) => p.player_id));
+
+      const savedLocalName = getStoredName(gameCode);
+      const savedServerName = data?.user_name || "";
+      setVoterName(savedLocalName || savedServerName || "");
     }
     setLoading(false);
   }
@@ -86,6 +99,11 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
     setError("");
     setMessage("");
 
+    if (!voterName.trim()) {
+      setError("Enter your name first so the host can track prize results.");
+      return;
+    }
+
     if (!winnerPickId) {
       setError("Pick one winner before saving.");
       return;
@@ -103,32 +121,23 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
 
     setSavingPicks(true);
     const voterSecret = getOrCreateVoterToken(gameCode);
+    storeName(gameCode, voterName.trim());
 
-    const winnerResult = await supabase.rpc("place_survivor_winner_bet", {
+    const result = await supabase.rpc("save_survivor_betting_picks", {
       p_game_code: gameCode,
-      p_player_id: winnerPickId,
       p_voter_secret: voterSecret,
+      p_voter_name: voterName.trim(),
+      p_winner_player_id: winnerPickId,
+      p_top4_player_ids: top4PickIds,
     });
 
-    if (winnerResult.error) {
-      setError(winnerResult.error.message);
+    if (result.error) {
+      setError(result.error.message);
       setSavingPicks(false);
       return;
     }
 
-    const top4Result = await supabase.rpc("set_survivor_top4_bets", {
-      p_game_code: gameCode,
-      p_player_ids: top4PickIds,
-      p_voter_secret: voterSecret,
-    });
-
-    if (top4Result.error) {
-      setError(top4Result.error.message);
-      setSavingPicks(false);
-      return;
-    }
-
-    setMessage(`Saved: ${selectedWinnerName || "winner"} to win, and your 4 Top 4 picks.`);
+    setMessage(`Saved picks for ${voterName.trim()}: ${selectedWinnerName || "winner"} to win, plus your Top 4.`);
     await loadBoard();
     setSavingPicks(false);
   }
@@ -148,26 +157,24 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
 
         <div className="card">
           <h2>Make Your Picks</h2>
-          <p className="small">
-            You must choose <strong>one winner</strong> and <strong>exactly 4 Top 4 picks</strong> before saving. Your winner must also be included in your Top 4.
-            You can change these after each round; if you do not change them, your last saved picks stay in place.
-          </p>
+
+          <label>
+            <span className="small">Your name for prize tracking</span>
+            <input
+              value={voterName}
+              onChange={(e) => setVoterName(e.target.value)}
+              placeholder="Enter your name"
+              maxLength={60}
+            />
+          </label>
+
           <p>Winner pick: <strong>{selectedWinnerName || "None selected"}</strong></p>
           <p>Top 4 picks: <strong>{top4PickIds.length}/4 selected</strong>{selectedTop4Names ? ` — ${selectedTop4Names}` : ""}</p>
+
           <div className="row">
             <button onClick={saveAllPicks} disabled={savingPicks}>{savingPicks ? "Saving..." : "Save Winner + Top 4 Picks"}</button>
             <button className="secondary" onClick={() => { setWinnerPickId(""); setTop4PickIds([]); }}>Clear Unsaved Picks</button>
           </div>
-          {savedWinnerPickId && <p className="small">Last saved winner pick: <strong>{board?.user_pick?.player_name}</strong></p>}
-        </div>
-
-        <div className="card">
-          <h2>How the odds work</h2>
-          <p className="small">
-            Win odds are fair American odds rounded to the nearest 10 and normalized to roughly 100% total implied probability.
-            Fewer cumulative elimination votes help, more elimination votes hurt, immunity gives a modest temporary boost, and winner picks create a small momentum bump.
-            Justin, Anthony, Maura, Kyan, Kyle, John, Megan, and Cole also have built-in starting nudges. If Maura or Kyan reach the final 3/4, they get a stronger host/friend-group late-game boost, with Maura favored over Kyan if both are alive.
-          </p>
         </div>
 
         {message && <div className="notice">{message}</div>}
@@ -211,7 +218,7 @@ export default function BettingPage({ params }: { params: { gameCode: string } }
                 <p className="small">
                   Cumulative elimination votes: <strong>{p.total_votes_received}</strong><br />
                   Winner bets: <strong>{p.winner_bet_count || 0}</strong> ({Number(p.winner_bet_share || 0).toFixed(2)}%)<br />
-                  Top 4 picks: <strong>{p.top4_bet_count || 0}</strong> ({Number(p.top4_bet_share || 0).toFixed(2)}% of picks)
+                  Top 4 picks: <strong>{p.top4_bet_count || 0}</strong> ({Number(p.top4_bet_share || 0).toFixed(2)}% pick rate)
                 </p>
 
                 <div className="row">
